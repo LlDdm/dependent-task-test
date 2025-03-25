@@ -2,26 +2,26 @@ package edu.boun.edgecloudsim.applications.ll;
 
 import java.util.ArrayList;
 
-import edu.boun.edgecloudsim.utils.AppProperty;
-
 import edu.boun.edgecloudsim.core.SimSettings;
 import edu.boun.edgecloudsim.task_generator.LoadGeneratorModel;
 import edu.boun.edgecloudsim.utils.TaskProperty;
 import edu.boun.edgecloudsim.utils.SimLogger;
 import edu.boun.edgecloudsim.utils.SimUtils;
+import org.apache.commons.math3.distribution.ExponentialDistribution;
 
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class LOfflineLoadGenerator extends LoadGeneratorModel{
     private final Random rng;
 
     public LOfflineLoadGenerator(int _numberOfMobileDevices, double _simulationTime, String _simScenario) {
         super(_numberOfMobileDevices, _simulationTime, _simScenario);
-        this.rng = new Random();
+        this.rng = ThreadLocalRandom.current();
     }
     private int generateNormalint(int mean, int stdDev){
-        return (int) Math.round(rng.nextGaussian() * stdDev * mean);
+        return (int) Math.round(rng.nextGaussian() * stdDev + mean);
     }
 
     private long generateNormalLong(long mean, long stdDev) {
@@ -32,116 +32,127 @@ public class LOfflineLoadGenerator extends LoadGeneratorModel{
         return rng.nextInt(min, max + 1);
     }
 
-    int appTypeOfDevices[];
+    int[] appTypeOfDevices;
     public List<APP> appList;
 
 
     @Override
     public void initializeModel() {
+        double [][] APPlookuptable = SimSettings.getInstance().getAppLookUpTable();
+        if (APPlookuptable == null || APPlookuptable.length == 0)
+            throw new IllegalStateException("App lookup table is not initialized or is empty.");
+
         taskList = new ArrayList<TaskProperty>();
-        APP app = new APP();
         //Each mobile device utilizes an app type (task type)
         appTypeOfDevices = new int[numberOfMobileDevices];
         for(int i=0; i<numberOfMobileDevices; i++) {
             int randomAppType = -1;
-            double appTypeSelector = SimUtils.getRandomDoubleNumber(0,100);
+            double appTypeSelector = SimUtils.getRandomDoubleNumber(0, 100);
             double appTypePercentage = 0;
-            for (int j=0; j<SimSettings.getInstance().getAppLookUpTable().length; j++) {
-                appTypePercentage += SimSettings.getInstance().getAppLookUpTable()[j][0];
-                if(appTypeSelector <= appTypePercentage){
+            for (int j = 0; j < APPlookuptable.length; j++) {
+                appTypePercentage += APPlookuptable[j][0];
+                if (appTypeSelector <= appTypePercentage) {
                     randomAppType = j;
                     break;
                 }
             }
-            if(randomAppType == -1){
+            if (randomAppType == -1) {
                 SimLogger.printLine("Impossible is occurred! no random task type!");
                 continue;
             }
 
             appTypeOfDevices[i] = randomAppType;
-            app.AppName = SimSettings.getInstance().getAppName(randomAppType);
+            String AppName = SimSettings.getInstance().getAppName(randomAppType);
 
-            //double poissonMean = SimSettings.getInstance().getTaskLookUpTable()[randomTaskType][2];
-            //double activePeriod = SimSettings.getInstance().getTaskLookUpTable()[randomTaskType][3];
-            //double idlePeriod = SimSettings.getInstance().getTaskLookUpTable()[randomTaskType][4];
-            //double activePeriodStartTime = SimUtils.getRandomDoubleNumber(
-                    //SimSettings.CLIENT_ACTIVITY_START_TIME,
-                    //SimSettings.CLIENT_ACTIVITY_START_TIME * 2);  //active period starts shortly after the simulation started (e.g. 10 seconds)
-            //double virtualTime = activePeriodStartTime;
+            double poissonMean = APPlookuptable[randomAppType][2];
+            double activePeriod = APPlookuptable[randomAppType][3];
+            double idlePeriod = APPlookuptable[randomAppType][4];
+            double activePeriodStartTime = SimUtils.getRandomDoubleNumber(
+                    SimSettings.CLIENT_ACTIVITY_START_TIME,
+                    SimSettings.CLIENT_ACTIVITY_START_TIME + activePeriod);  //active period starts shortly after the simulation started (e.g. 10 seconds)
+            double virtualTime = activePeriodStartTime;
 
-            //ExponentialDistribution rng = new ExponentialDistribution(poissonMean);
-            //ExponentialDistribution rng[] = new ExponentialDistribution[10];
+            ExponentialDistribution ps = new ExponentialDistribution(poissonMean);
+            //ExponentialDistribution ps[] = new ExponentialDistribution[10];
             //for(int j=0; j<10; j++)
-            //	rng[j] = new ExponentialDistribution(poissonMean * ((double)1 + (double)j * (double) 0.12));
+            //ps[j] = new ExponentialDistribution(poissonMean * ((double)1 + (double)j * (double) 0.12));
 
-            //while(virtualTime < simulationTime) {
+            if (virtualTime < simulationTime) {
                 //int index = Math.min(9, (int)virtualTime / 15);
-                //double interval = rng[9-index].sample();
-                //double interval = rng.sample();
+                //double interval = ps[9-index].sample();
+                double interval = ps.sample();
 
-                //if(interval <= 0){
-                    //SimLogger.printLine("Impossible is occurred! interval is " + interval + " for device " + i + " time " + virtualTime);
-                    //continue;
-                //}
+                 while(interval <= 0) {
+                     SimLogger.printLine("Impossible is occurred! interval is " + interval + " for device " + i + " time " + virtualTime);
+                     interval = ps.sample();
+                }
+
+                if (virtualTime > activePeriodStartTime + activePeriod) {
+                    activePeriodStartTime = activePeriodStartTime + activePeriod + idlePeriod;
+                    virtualTime = activePeriodStartTime;
+                }
+
                 //SimLogger.printLine(virtualTime + " -> " + interval + " for device " + i + " time ");
-                //virtualTime += interval;
+                virtualTime += interval;
 
-                //if(virtualTime > activePeriodStartTime + activePeriod){
-                    //activePeriodStartTime = activePeriodStartTime + activePeriod + idlePeriod;
-                    //virtualTime = activePeriodStartTime;
-                    //continue;
+                //if (virtualTime > activePeriodStartTime + activePeriod) {
+                //    activePeriodStartTime = activePeriodStartTime + activePeriod + idlePeriod;
+                //    virtualTime = activePeriodStartTime;
                 //}
 
-            long appinputSize = (long) SimSettings.getInstance().getAppLookUpTable()[randomTaskType][5];
-            long inputSizeBias = appinputSize / 10;
-            appinputSize = SimUtils.getRandomLongNumber(appinputSize - inputSizeBias, appinputSize + inputSizeBias);
+                long appinputSize = (long) APPlookuptable[randomAppType][5];
+                long inputSizeBias = appinputSize / 10;
+                appinputSize = SimUtils.getRandomLongNumber(appinputSize - inputSizeBias, appinputSize + inputSizeBias);
 
-            long applength = (long) SimSettings.getInstance().getAppLookUpTable()[randomTaskType][7];
-            long lengthBias = applength / 10;
-            applength = SimUtils.getRandomLongNumber(applength - lengthBias, applength + lengthBias);
+                long applength = (long) APPlookuptable[randomAppType][7];
+                long lengthBias = applength / 10;
+                applength = SimUtils.getRandomLongNumber(applength - lengthBias, applength + lengthBias);
 
-            long appoutputSize = (long) SimSettings.getInstance().getAppLookUpTable()[randomTaskType][6];
-            long outSizeBias = appoutputSize / 10;
-            appoutputSize = SimUtils.getRandomLongNumber(appoutputSize - outSizeBias, appoutputSize + outSizeBias);
+                long appoutputSize = (long) APPlookuptable[randomAppType][6];
+                long outSizeBias = appoutputSize / 10;
+                appoutputSize = SimUtils.getRandomLongNumber(appoutputSize - outSizeBias, appoutputSize + outSizeBias);
 
+                int avg_task_num = (int) APPlookuptable[randomAppType][13];
+                int task_num_Bias = avg_task_num / 10;
+                avg_task_num = (int) SimUtils.getRandomLongNumber(avg_task_num - task_num_Bias, avg_task_num + task_num_Bias);
 
-            int avg_task_num = (int) SimSettings.getInstance().getAppLookUpTable()[randomTaskType][13];
-            int task_num_Bias = avg_task_num / 10;
-            avg_task_num = (int) SimUtils.getRandomLongNumber(avg_task_num - task_num_Bias, avg_task_num + task_num_Bias);
+                long avg_task_size = applength / avg_task_num;
 
-            long avg_task_size =  applength/avg_task_num;
+                float CCR = (float) APPlookuptable[randomAppType][15];
+                long total_tra_size = (long) CCR * applength;
 
-            float CCR = (float)SimSettings.getInstance().getAppLookUpTable()[randomTaskType][15];
-            long total_tra_size = (long)CCR * applength;
+                long avg_task_tra_size = total_tra_size / avg_task_num;
 
-            long avg_task_tra_size =  total_tra_size/avg_task_num;
+                float ev_ds = (float) APPlookuptable[randomAppType][16];
 
-            float ev_ds = (float)SimSettings.getInstance().getAppLookUpTable()[randomTaskType][16];
+                float shape_factor = (float) APPlookuptable[randomAppType][14];
 
-            float shape_factor = (float)SimSettings.getInstance().getAppLookUpTable()[randomTaskType][14];
-            int depth_of_DAG = (int)(Math.sqrt(avg_task_num)/shape_factor);
-            depth_of_DAG = generateNormalint(depth_of_DAG, depth_of_DAG);
-            if(depth_of_DAG < 2)
+                int depth_of_DAG = (int) (Math.sqrt(avg_task_num) / shape_factor);
+                depth_of_DAG = generateNormalint(depth_of_DAG, depth_of_DAG);
+                if (depth_of_DAG < 2)
                     depth_of_DAG = 2;
 
-            int max_width = (int)(Math.sqrt(avg_task_num)*shape_factor);
+                int max_width = (int) (Math.sqrt(avg_task_num) * shape_factor);
 
-            DAG dag = generateDAG(avg_task_num, depth_of_DAG, max_width, avg_task_size, avg_task_tra_size, ev_ds,
-                    appinputSize, appoutputSize, i);
+                DAG dag = generateDAG(avg_task_num, depth_of_DAG, max_width, avg_task_size, avg_task_tra_size, ev_ds,
+                        appinputSize, appoutputSize, i);
+
+                appList.add(new APP(i,AppName,virtualTime,simulationTime,appinputSize,appoutputSize,
+                        applength,dag,CCR,shape_factor));
+
+                // Assuming the creation of a workflow and its DAG is based on appType and inputFileSize
+
+                //long outputFileSize =(long)SimSettings.getInstance().getAppLookUpTable()[randomTaskType][6];
+                //long outputFileSizeBias = outputFileSize / 10;
 
 
-            // Assuming the creation of a workflow and its DAG is based on appType and inputFileSize
+                //int pesNumber = (int)SimSettings.getInstance().getAppLookUpTable()[randomTaskType][8];
 
-            //long outputFileSize =(long)SimSettings.getInstance().getAppLookUpTable()[randomTaskType][6];
-            //long outputFileSizeBias = outputFileSize / 10;
-
-
-            //int pesNumber = (int)SimSettings.getInstance().getAppLookUpTable()[randomTaskType][8];
-
-            //outputFileSize = SimUtils.getRandomLongNumber(outputFileSize - outputFileSizeBias, outputFileSize + outputFileSizeBias);
-            //length = SimUtils.getRandomLongNumber(length - lengthBias, length + lengthBias);
-            //taskList.add(new TaskProperty(virtualTime, i, randomTaskType, pesNumber, applength, appinputSize, outputFileSize));
+                //outputFileSize = SimUtils.getRandomLongNumber(outputFileSize - outputFileSizeBias, outputFileSize + outputFileSizeBias);
+                //length = SimUtils.getRandomLongNumber(length - lengthBias, length + lengthBias);
+                //taskList.add(new TaskProperty(virtualTime, i, randomTaskType, pesNumber, applength, appinputSize, outputFileSize));
             }
+        }
 
     }
 
@@ -219,7 +230,7 @@ public class LOfflineLoadGenerator extends LoadGeneratorModel{
     }
 
     //为起始点与第一层节点之间的边和最后一层节点与结束节点之间的边生成随机大小的传输数据
-    public List<Long>randomsize(List<Task> Layer, long in_pr_out_size){
+    public List<Long> randomsize(List<Task> Layer, long in_pr_out_size){
         List<Long> randomSizes = new ArrayList<>();
         for (int i=0;i<Layer.size()-1;i++) {
             randomSizes.add(rng.nextLong());
