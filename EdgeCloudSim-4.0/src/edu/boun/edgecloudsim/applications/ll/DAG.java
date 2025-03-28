@@ -1,11 +1,6 @@
 package edu.boun.edgecloudsim.applications.ll;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Queue;
-import java.util.Stack;
+import java.util.*;
 
 class DAG {
     private List<Task> tasks;
@@ -34,23 +29,39 @@ class DAG {
 
     List<Task> topologicalSort() {
         List<Task> sortedTasks = new ArrayList<>();
-        HashMap<Integer, Integer> inDegree = new HashMap<>();
+        HashMap<Integer, Integer> outDegree = new HashMap<>();
         Queue<Task> queue = new LinkedList<>();
         for (Task task : tasks) {
-            inDegree.put(task.id, task.getPredecessors().size());
-            if(task.getPredecessors().isEmpty()){
-                queue.add(task);
+            outDegree.put(task.id, task.getSuccessors() .size());
+            if(task.getSuccessors().isEmpty()){
+                queue.offer(task);
+                task.R = 0;
             }
         }
 
         while(!queue.isEmpty()){
             Task task = queue.poll();
             sortedTasks.add(task);
+            for(Task pre : task.getPredecessors()) {
+                if (pre != null) {
+                    queue.offer(pre);
+                    long recent_max = 0;
+                    for (Task suc : pre.getSuccessors()) {
+                        long tra = pre.successors.get(suc.id);
+                        if (tra + suc.R > recent_max)
+                            recent_max = tra + suc.R;
+                    }
+                    pre.R = recent_max + pre.size;
+                }
+            }
         }
+
+        sortedTasks.sort(Comparator.comparingLong(Task -> Task.R));
+        Collections.reverse(sortedTasks);
 
         if (sortedTasks.size() != tasks.size()) {
             throw new IllegalArgumentException("The graph has at least one cycle, cannot perform topological sort.");
         }
-        return new ArrayList<>(sortedTasks);
+        return sortedTasks;
     }
 }

@@ -52,9 +52,7 @@ public class LScenarioFactory implements ScenarioFactory {
     }
 
     @Override
-    public MobilityModel getMobilityModel() {
-        return new NomadicMobility(numOfMobileDevice,simulationTime);
-    }
+    public MobilityModel getMobilityModel() { return new LMobilityModel(numOfMobileDevice,simulationTime);}
 
     @Override
     public NetworkModel getNetworkModel() {

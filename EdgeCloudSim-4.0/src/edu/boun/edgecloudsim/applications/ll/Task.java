@@ -9,6 +9,9 @@ class Task {
     double completetime;
     Map<Task, Long> predecessors; // 前驱任务列表及边的大小
     Map<Task, Long> successors;   // 后继任务列表及边的大小
+    long R;
+    int datacenterid;
+
 
     Task(int id, long size, int APPid) {
         this.id = id;
